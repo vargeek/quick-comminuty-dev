@@ -62,29 +62,71 @@ def checkQuickxRoot():
 #         sublime.error_message("cocos2dx_root no set")
 #         return False
 #     return cocos2dx_root
+def _searchPlayerInPathes(pathes):
+    isOSX = (sublime.platform()=="osx")
+    def _isPlayer(path):
+        return path.endswith( ".app" if isOSX else ".exe" )
+    for path in pathes:
+        shouldSearchInDir = os.path.isdir(path) and not (isOSX and path.endswith(".app"))
+        if shouldSearchInDir:
+            for subpath in os.listdir(path):
+                if _isPlayer(subpath):
+                    return os.path.join(path, subpath)
+        elif _isPlayer(path):
+            return path
+    return ""
+
+def checkPlayerPath(workdir):
+    settings = helper.loadSettings("quick-comminuty-dev")
+    platform = sublime.platform()
+    isWindows = platform == "windows"
+    isOSX = platform == "osx"
+    pathes = []
+
+    path = settings.get("player_in_project")
+    if type(path) == dict:
+        path = path.get(platform)
+    if path:
+        pathes.append(os.path.join(workdir, path))
+
+    path = ""
+    quick_cocos2dx_root = checkQuickxRoot()
+    if quick_cocos2dx_root:
+        if isOSX:
+            path = os.path.join(quick_cocos2dx_root, "quick/player/player3.app")
+        elif isWindows:
+            path = os.path.join(quick_cocos2dx_root, "quick/player/win32/player3.exe")
+        if path:
+            pathes.append(path)
+
+
+    playerPath = _searchPlayerInPathes(pathes)
+
+    if playerPath and isOSX:
+        playerPath = os.path.join(playerPath, 'Contents/MacOS')
+        items = os.listdir(playerPath)
+        playerPath = (os.path.join(playerPath, items[0]) if len(items) > 0 else "")
+    return playerPath
 
 process=None
 def runWithPlayer(srcDir):
     global process
-    # root
-    quick_cocos2dx_root = checkQuickxRoot()
-    if not quick_cocos2dx_root:
-        return
-    # player path for platform
-    playerPath=""
-    if sublime.platform()=="osx":
-        playerPath=quick_cocos2dx_root+"/quick/player/player3.app/Contents/MacOS/player3"
-    elif sublime.platform()=="windows":
-        playerPath=quick_cocos2dx_root+"/quick/player/win32/player3.exe"
-    if playerPath=="" or not os.path.exists(playerPath):
-        sublime.error_message("player no exists")
-        return
-    args=[playerPath]
-    # param
+
     path=srcDir
     arr=os.path.split(path)
     workdir=arr[0]
     srcDirName=arr[1]
+
+    # player path for platform
+    playerPath = checkPlayerPath(workdir)
+    sublime.status_message(playerPath or 'not found')
+
+    if playerPath=="" or not os.path.exists(playerPath):
+        sublime.error_message("player no exists")
+        return
+
+    args=[playerPath]
+    # param
     args.append("-workdir")
     args.append(workdir)
     args.append("-file")
